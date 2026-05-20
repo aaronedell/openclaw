@@ -1,0 +1,20 @@
+Image: 165244 bytes, 220328 b64 chars
+MD5 of image: d37714086a52be2850d879bd8a850da9
+
+AWS CLI stderr: (none)
+AWS CLI exit code: 0
+
+=== Bedrock Claude Opus 4.7 response ===
+**H1 title:**
+OpenClaw PR #72404 — Real behavior proof
+
+**Italicized note below it:**
+Generated 2026-05-20 by Odin agent on Aaron's Mac mini (OpenClaw 2026.5.18, Claude Opus 4.7 via Bedrock us-east-1)
+
+**Green check marks (✅) in the verification table:** 12
+
+=== /response ===
+
+stop_reason: end_turn
+input_tokens: 2228
+output_tokens: 130

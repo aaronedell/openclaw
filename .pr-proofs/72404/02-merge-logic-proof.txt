@@ -1,0 +1,34 @@
+Model ID                                                Result               Expected                  Status
+------------------------------------------------------------------------------------------------------------------------
+us.anthropic.claude-opus-4-7                            ["text","image"]     vision-family Anthropic   ✅
+global.anthropic.claude-opus-4-7                        ["text","image"]     vision-family Anthropic   ✅
+anthropic.claude-opus-4-7                               ["text","image"]     vision-family Anthropic   ✅
+us.anthropic.claude-opus-4-6-v1                         ["text","image"]     vision-family Anthropic   ✅
+us.anthropic.claude-sonnet-4-6                          ["text","image"]     vision-family Anthropic   ✅
+us.anthropic.claude-haiku-4-5-20251001-v1:0             ["text","image"]     vision-family Anthropic   ✅
+us.anthropic.claude-3-5-sonnet-20241022-v2:0            ["text","image"]     vision-family Anthropic 3.5 ✅
+us.anthropic.claude-3-7-sonnet-20250219-v1:0            ["text","image"]     vision-family Anthropic 3.7 ✅
+gpt-4o                                                  ["text","image"]     vision-family OpenAI      ✅
+gpt-4o-mini                                             ["text","image"]     vision-family OpenAI      ✅
+gpt-4.1                                                 ["text","image"]     vision-family OpenAI      ✅
+openai/o1                                               ["text","image"]     vision-family OpenAI o-series ✅
+openai/o3-pro                                           ["text","image"]     vision-family OpenAI o-series ✅
+gemini-1.5-pro                                          ["text","image"]     vision-family Google      ✅
+gemini-2.0-flash                                        ["text","image"]     vision-family Google      ✅
+llama-3.2-11b-vision-instruct                           ["text","image"]     vision-family Meta (vision-marked) ✅
+llama-3.2-90b-vision-instruct                           ["text","image"]     vision-family Meta (vision-marked) ✅
+amazon.titan-embed-text-v1                              <undefined>          Titan embed → not vision  ✅
+anthropic.claude-v2:1                                   <undefined>          Claude 2 → not vision     ✅
+amazon.titan-text-express-v1                            <undefined>          Titan text → not vision   ✅
+nova-pro-o4-v1                                          <undefined>          must NOT match o-series substring trap ✅
+fo1-embed                                               <undefined>          must NOT match o1 substring trap ✅
+llama-3.2-3b-instruct                                   <undefined>          Llama 3.2 small (text-only) → not vision ✅
+llama-3.2-1b-instruct                                   <undefined>          Llama 3.2 small (text-only) → not vision ✅
+
+Result: 24/24 cases correct.
+All vision-family entries default to ['text','image'].
+All text-only and substring-trap entries stay <undefined> (downstream treats as text-only).
+
+This is the EXACT regex from the merged PR, applied to Aaron's real model catalog +
+the edge cases the unit tests guard against. The fix prevents the silent text-only
+fallback for vision-capable models when the user's static catalog omits `input`.

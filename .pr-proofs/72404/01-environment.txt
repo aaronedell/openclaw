@@ -1,0 +1,20 @@
+=== OpenClaw version ===
+OpenClaw 2026.5.18 (50a2481)
+
+=== System ===
+Darwin Odins-Mac-mini.local 25.4.0 Darwin Kernel Version 25.4.0: Thu Mar 19 19:33:25 PDT 2026; root:xnu-12377.101.15~1/RELEASE_ARM64_T6041 arm64
+
+=== Active model (this conversation) ===
+amazon-bedrock/us.anthropic.claude-opus-4-7
+
+=== Static catalog state (~/.openclaw/openclaw.json) before fix ===
+(Aaron's machine had already been workaround-patched, so input is set.)
+  us.anthropic.claude-opus-4-7                                           input=['text', 'image']
+  global.anthropic.claude-opus-4-7                                       input=['text', 'image']
+  anthropic.claude-opus-4-7                                              input=['text', 'image']
+  us.anthropic.claude-opus-4-6-v1                                        input=['text', 'image']
+  global.anthropic.claude-opus-4-6-v1                                    input=['text', 'image']
+  us.anthropic.claude-sonnet-4-6                                         input=['text', 'image']
+  global.anthropic.claude-sonnet-4-6                                     input=['text', 'image']
+  us.anthropic.claude-haiku-4-5-20251001-v1:0                            input=['text', 'image']
+  global.anthropic.claude-haiku-4-5-20251001-v1:0                        input=['text', 'image']
