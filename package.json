@@ -1855,7 +1855,7 @@
     "@types/node": "25.9.1",
     "@types/ws": "8.18.1",
     "@typescript/native-preview": "7.0.0-dev.20260519.1",
-    "@vitest/coverage-v8": "4.1.9",
+    "@vitest/coverage-v8": "4.1.6",
     "jscpd": "4.2.3",
     "jsdom": "29.1.1",
     "lit": "3.3.3",
@@ -1866,7 +1866,7 @@
     "tsdown": "0.22.0",
     "tsx": "4.22.1",
     "unrun": "0.3.0",
-    "vitest": "4.1.9"
+    "vitest": "4.1.6"
   },
   "optionalDependencies": {
     "sharp": "0.34.5",

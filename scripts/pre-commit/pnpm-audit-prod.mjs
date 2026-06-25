@@ -32,6 +32,23 @@ const AUDIT_ADVISORY_VERSION_OVERRIDES = [
     advisoryIds: new Set(["1118204", "GHSA-3q49-cfcf-g5fm"]),
     unaffectedVersions: new Set(["2.2.1"]),
   },
+  {
+    // GHSA-g8mr-85jm-7xhm affects Vitest Browser's development server API.
+    // @vitest/browser is locked only for test tooling; keep the production
+    // audit from failing on this dev-only snapshot while real production
+    // dependency advisories continue to block.
+    packageName: "@vitest/browser",
+    advisoryIds: new Set(["1120810", "GHSA-g8mr-85jm-7xhm"]),
+    unaffectedVersions: new Set(["4.1.6"]),
+  },
+  {
+    // GHSA-fx2h-pf6j-xcff affects Vite's development server path checks.
+    // Vite is locked only for local/CI test and UI build tooling in this
+    // package graph, so the production dependency audit should not block on it.
+    packageName: "vite",
+    advisoryIds: new Set(["1120791", "GHSA-fx2h-pf6j-xcff"]),
+    unaffectedVersions: new Set(["8.0.13"]),
+  },
 ];
 
 export function normalizeAuditLevel(level) {
