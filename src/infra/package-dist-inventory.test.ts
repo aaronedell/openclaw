@@ -113,6 +113,47 @@ describe("package dist inventory", () => {
     });
   });
 
+  it("keeps npm-omitted plugin-sdk test helpers out of the inventory", async () => {
+    await withTempDir({ prefix: "openclaw-dist-inventory-sdk-tests-" }, async (packageRoot) => {
+      const packagedRuntime = path.join(packageRoot, "dist", "plugin-sdk", "runtime.js");
+      const omittedTestHelpers = [
+        "agent-runtime-test-contracts",
+        "channel-contract-testing",
+        "channel-target-testing",
+        "channel-test-helpers",
+        "plugin-test-api",
+        "plugin-test-contracts",
+        "plugin-test-runtime",
+        "provider-http-test-mocks",
+        "provider-test-contracts",
+        "test-env",
+        "test-fixtures",
+        "test-node-mocks",
+        "testing",
+      ];
+
+      await fs.mkdir(path.dirname(packagedRuntime), { recursive: true });
+      await fs.writeFile(packagedRuntime, "export {};\n", "utf8");
+      for (const helper of omittedTestHelpers) {
+        await fs.writeFile(
+          path.join(packageRoot, "dist", "plugin-sdk", `${helper}.js`),
+          "export {};\n",
+          "utf8",
+        );
+        await fs.writeFile(
+          path.join(packageRoot, "dist", "plugin-sdk", `${helper}.d.ts`),
+          "export {};\n",
+          "utf8",
+        );
+      }
+
+      await expect(writePackageDistInventory(packageRoot)).resolves.toStrictEqual([
+        "dist/plugin-sdk/runtime.js",
+      ]);
+      await expect(collectPackageDistInventoryErrors(packageRoot)).resolves.toStrictEqual([]);
+    });
+  });
+
   it("keeps transient plugin dependency trees out of the inventory", async () => {
     await withTempDir({ prefix: "openclaw-dist-inventory-plugin-deps-" }, async (packageRoot) => {
       const realFile = path.join(packageRoot, "dist", "index.js");
