@@ -63,6 +63,8 @@ export const MODEL_THINKING_FORMATS = [
   "together",
   "qwen",
   "qwen-chat-template",
+  "string-thinking",
+  "ant-ling",
   "zai",
 ] as const satisfies readonly SupportedThinkingFormat[];
 
