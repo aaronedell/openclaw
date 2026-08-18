@@ -30,7 +30,11 @@ import {
   resolveNonEnvSecretRefApiKeyMarker,
 } from "./model-auth-markers.js";
 import { parseConfiguredModelVisibilityEntries } from "./model-selection-shared.js";
-import { mergeProviderModels } from "./models-config.merge.js";
+import {
+  inheritDiscoveredModelInput,
+  mergeProviderModels,
+  type ProviderCatalogModelInputPresenceResolver,
+} from "./models-config.merge.js";
 import type {
   ProviderApiKeyResolver,
   ProviderAuthResolver,
@@ -70,6 +74,7 @@ type ImplicitProviderParams = {
   providerDiscoveryTimeoutMs?: number;
   providerDiscoveryEntriesOnly?: boolean;
   onProviderCatalogOutcome?: (outcome: ProviderCatalogOutcome) => void;
+  resolveModelInputConfigured?: ProviderCatalogModelInputPresenceResolver;
 };
 
 type ImplicitProviderContext = ImplicitProviderParams & {
@@ -280,6 +285,7 @@ function mergeImplicitProviderConfig(params: {
   existing: ProviderConfig | undefined;
   implicit: ProviderConfig;
   dynamicProviderModels?: boolean;
+  resolveModelInputConfigured?: ProviderCatalogModelInputPresenceResolver;
 }): ProviderConfig {
   const { providerId, existing, implicit } = params;
   if (!existing) {
@@ -292,9 +298,12 @@ function mergeImplicitProviderConfig(params: {
   if (params.dynamicProviderModels) {
     // Wildcard-visible providers preserve discovered catalog updates while
     // keeping explicit user config authoritative for non-model fields.
-    return mergeProviderModels(implicit, existing);
+    return mergeProviderModels(implicit, existing, {
+      providerId,
+      resolveModelInputConfigured: params.resolveModelInputConfigured,
+    });
   }
-  return {
+  const merged = {
     ...implicit,
     ...existing,
     models:
@@ -302,6 +311,12 @@ function mergeImplicitProviderConfig(params: {
         ? existing.models
         : implicit.models,
   };
+  return inheritDiscoveredModelInput({
+    providerId,
+    implicit,
+    explicit: merged,
+    resolveModelInputConfigured: params.resolveModelInputConfigured,
+  });
 }
 
 function resolveImplicitProviderAuthMarker(params: {
@@ -473,6 +488,7 @@ async function resolvePluginImplicitProviders(
           config: ctx.config,
           providerId,
         }),
+        resolveModelInputConfigured: ctx.resolveModelInputConfigured,
       });
       discovered[providerId] = resolveImplicitProviderAuthMarker({
         ctx,
