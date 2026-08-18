@@ -3,16 +3,19 @@
  * this module to merge implicit provider discovery, explicit config, and
  * preserved secrets before touching models.json.
  */
+import { findNormalizedProviderValue } from "@openclaw/model-catalog-core/provider-id";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import type { PluginMetadataSnapshot } from "../plugins/plugin-metadata-snapshot.js";
 import type { ProviderCatalogOutcome } from "../plugins/provider-catalog.types.js";
 import type { PreparedProviderStaticCatalog } from "../plugins/provider-discovery.js";
 import { isRecord } from "../utils.js";
 import type { AuthProfileStore } from "./auth-profiles/types.js";
+import { normalizeConfiguredProviderCatalogModelId } from "./model-ref-shared.js";
 import {
   mergeProviders,
   mergeWithExistingProviderSecrets,
   type ExistingProviderConfig,
+  type ProviderCatalogModelInputPresenceResolver,
 } from "./models-config.merge.js";
 import {
   enforceSourceManagedProviderSecrets,
@@ -62,6 +65,7 @@ type ResolveImplicitProvidersForModelsJson = (params: {
   providerDiscoveryProviderIds?: readonly string[];
   providerDiscoveryTimeoutMs?: number;
   providerDiscoveryEntriesOnly?: boolean;
+  resolveModelInputConfigured?: ProviderCatalogModelInputPresenceResolver;
 }) => Promise<Record<string, ProviderConfig>>;
 
 /**
@@ -118,6 +122,31 @@ function buildPluginCatalogWrites(
   );
 }
 
+function buildModelInputPresenceResolver(params: {
+  sourceProviders: Record<string, ProviderConfig> | undefined;
+  manifestPlugins: PluginMetadataSnapshot["manifestRegistry"]["plugins"] | undefined;
+}): ProviderCatalogModelInputPresenceResolver | undefined {
+  if (!params.sourceProviders) {
+    return undefined;
+  }
+  return (providerId, modelId) => {
+    const provider = findNormalizedProviderValue(params.sourceProviders, providerId);
+    if (!provider?.models) {
+      return undefined;
+    }
+    const normalizedModelId = normalizeConfiguredProviderCatalogModelId(providerId, modelId, {
+      manifestPlugins: params.manifestPlugins,
+    });
+    const sourceModel = provider.models.find(
+      (model) =>
+        normalizeConfiguredProviderCatalogModelId(providerId, model.id, {
+          manifestPlugins: params.manifestPlugins,
+        }) === normalizedModelId,
+    );
+    return sourceModel ? Object.hasOwn(sourceModel, "input") : undefined;
+  };
+}
+
 /** Resolves providers for models.json with injectable implicit-provider discovery. */
 async function resolveProvidersForModelsJsonWithDeps(
   params: {
@@ -141,6 +170,10 @@ async function resolveProvidersForModelsJsonWithDeps(
     return mergeProviders({ implicit: {}, explicit: explicitProviders });
   }
   const resolveImplicitProvidersImpl = deps?.resolveImplicitProviders ?? resolveImplicitProviders;
+  const resolveModelInputConfigured = buildModelInputPresenceResolver({
+    sourceProviders: context.sourceConfigForSecrets.models?.providers,
+    manifestPlugins: context.pluginMetadataSnapshot?.manifestRegistry.plugins,
+  });
   const implicitProviders = await resolveImplicitProvidersImpl({
     agentDir,
     ...(params.authStore ? { authStore: params.authStore } : {}),
@@ -149,6 +182,7 @@ async function resolveProvidersForModelsJsonWithDeps(
     env,
     ...(context.workspaceDir ? { workspaceDir: context.workspaceDir } : {}),
     explicitProviders,
+    ...(resolveModelInputConfigured ? { resolveModelInputConfigured } : {}),
     ...(context.pluginMetadataSnapshot
       ? { pluginMetadataSnapshot: context.pluginMetadataSnapshot }
       : {}),
@@ -171,6 +205,7 @@ async function resolveProvidersForModelsJsonWithDeps(
   return mergeProviders({
     implicit: implicitProviders,
     explicit: explicitProviders,
+    resolveModelInputConfigured,
   });
 }
 

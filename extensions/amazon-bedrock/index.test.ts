@@ -334,6 +334,54 @@ describe("amazon-bedrock provider plugin", () => {
     ).toBeUndefined();
   });
 
+  it("returns raw discovery for the host to merge with materialized config", async () => {
+    foundationModelResults.push({
+      modelSummaries: [
+        {
+          modelId: "anthropic.claude-opus-4-7",
+          modelName: "Claude Opus 4.7",
+          providerName: "Anthropic",
+          inputModalities: ["TEXT", "IMAGE"],
+          outputModalities: ["TEXT"],
+          responseStreamingSupported: true,
+          modelLifecycle: { status: "ACTIVE" },
+        },
+      ],
+    });
+    inferenceProfileListResults.push({ inferenceProfileSummaries: [] });
+    const provider = await registerWithConfig();
+
+    const result = await provider.catalog?.run({
+      config: {
+        models: {
+          providers: {
+            "amazon-bedrock": {
+              baseUrl: "https://explicit.example.test",
+              models: [
+                {
+                  id: "anthropic.claude-opus-4-7",
+                  name: "Configured Opus",
+                  reasoning: false,
+                  input: ["text"],
+                  cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+                  contextWindow: 1,
+                  maxTokens: 1,
+                },
+              ],
+            },
+          },
+        },
+      },
+      env: { AWS_PROFILE: "default", AWS_REGION: "us-east-1" } as NodeJS.ProcessEnv,
+    } as never);
+
+    if (!result || !("provider" in result)) {
+      throw new Error("expected single provider catalog result");
+    }
+    expect(result.provider.baseUrl).toBe("https://bedrock-runtime.us-east-1.amazonaws.com");
+    expect(result.provider.models[0]?.input).toEqual(["text", "image"]);
+  });
+
   it("marks Claude 4.6 Bedrock models as adaptive by default", async () => {
     const provider = await registerSingleProviderPlugin(amazonBedrockPlugin);
 

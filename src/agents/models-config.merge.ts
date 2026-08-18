@@ -10,6 +10,11 @@ import { isNonSecretApiKeyMarker } from "./model-auth-markers.js";
 import { resolveCatalogOwnedModelCompat } from "./model-compat-catalog.js";
 import type { ProviderConfig } from "./models-config.providers.secrets.js";
 
+export type ProviderCatalogModelInputPresenceResolver = (
+  providerId: string,
+  modelId: string,
+) => boolean | undefined;
+
 export function normalizeProviderMapKeys<T>(
   providers: Record<string, T> | null | undefined,
 ): Record<string, T> {
@@ -56,21 +61,30 @@ function getProviderModelId(model: unknown): string {
 export function mergeProviderModels(
   implicit: ProviderConfig,
   explicit: ProviderConfig,
+  options?: {
+    providerId: string;
+    resolveModelInputConfigured?: ProviderCatalogModelInputPresenceResolver;
+  },
 ): ProviderConfig {
+  const explicitProvider = options
+    ? inheritDiscoveredModelInput({ implicit, explicit, ...options })
+    : explicit;
   const implicitModels = Array.isArray(implicit.models) ? implicit.models : [];
-  const explicitModels = Array.isArray(explicit.models) ? explicit.models : [];
+  const explicitModels = Array.isArray(explicitProvider.models) ? explicitProvider.models : [];
   const implicitHeaders =
     implicit.headers && typeof implicit.headers === "object" && !Array.isArray(implicit.headers)
       ? implicit.headers
       : undefined;
   const explicitHeaders =
-    explicit.headers && typeof explicit.headers === "object" && !Array.isArray(explicit.headers)
-      ? explicit.headers
+    explicitProvider.headers &&
+    typeof explicitProvider.headers === "object" &&
+    !Array.isArray(explicitProvider.headers)
+      ? explicitProvider.headers
       : undefined;
   if (implicitModels.length === 0) {
     return {
       ...implicit,
-      ...explicit,
+      ...explicitProvider,
       ...(implicitHeaders || explicitHeaders
         ? {
             headers: {
@@ -116,9 +130,12 @@ export function mergeProviderModels(
       },
       catalogCompat: implicitModel.compat,
       configuredRoute: {
-        api: explicitModel.api ?? explicit.api ?? implicitModel.api ?? implicit.api,
+        api: explicitModel.api ?? explicitProvider.api ?? implicitModel.api ?? implicit.api,
         baseUrl:
-          explicitModel.baseUrl ?? explicit.baseUrl ?? implicitModel.baseUrl ?? implicit.baseUrl,
+          explicitModel.baseUrl ??
+          explicitProvider.baseUrl ??
+          implicitModel.baseUrl ??
+          implicit.baseUrl,
       },
       configuredCompat: explicitModel.compat,
     });
@@ -148,7 +165,7 @@ export function mergeProviderModels(
 
   return {
     ...implicit,
-    ...explicit,
+    ...explicitProvider,
     ...(implicitHeaders || explicitHeaders
       ? {
           headers: {
@@ -161,15 +178,59 @@ export function mergeProviderModels(
   };
 }
 
+/** Restores discovered input only when the source model row omitted that field. */
+export function inheritDiscoveredModelInput(params: {
+  providerId: string;
+  implicit: ProviderConfig;
+  explicit: ProviderConfig;
+  resolveModelInputConfigured?: ProviderCatalogModelInputPresenceResolver;
+}): ProviderConfig {
+  const { resolveModelInputConfigured } = params;
+  const explicitModels = Array.isArray(params.explicit.models) ? params.explicit.models : [];
+  const implicitModels = Array.isArray(params.implicit.models) ? params.implicit.models : [];
+  if (!resolveModelInputConfigured || explicitModels.length === 0 || implicitModels.length === 0) {
+    return params.explicit;
+  }
+
+  const implicitById = new Map(
+    implicitModels
+      .map((model) => [getProviderModelId(model), model] as const)
+      .filter(([id]) => Boolean(id)),
+  );
+  let mutated = false;
+  const models = explicitModels.map((explicitModel) => {
+    const id = getProviderModelId(explicitModel);
+    const implicitModel = implicitById.get(id);
+    if (
+      !id ||
+      !implicitModel ||
+      implicitModel.input === undefined ||
+      resolveModelInputConfigured(params.providerId, id) !== false
+    ) {
+      return explicitModel;
+    }
+    mutated = true;
+    return Object.assign({}, explicitModel, { input: implicitModel.input });
+  });
+
+  return mutated ? { ...params.explicit, models } : params.explicit;
+}
+
 /** Merges implicit and explicit provider config maps by provider id. */
 export function mergeProviders(params: {
   implicit?: Record<string, ProviderConfig> | null;
   explicit?: Record<string, ProviderConfig> | null;
+  resolveModelInputConfigured?: ProviderCatalogModelInputPresenceResolver;
 }): Record<string, ProviderConfig> {
   const out = normalizeProviderMapKeys(params.implicit);
   for (const [providerKey, explicit] of Object.entries(normalizeProviderMapKeys(params.explicit))) {
     const implicit = out[providerKey];
-    out[providerKey] = implicit ? mergeProviderModels(implicit, explicit) : explicit;
+    out[providerKey] = implicit
+      ? mergeProviderModels(implicit, explicit, {
+          providerId: providerKey,
+          resolveModelInputConfigured: params.resolveModelInputConfigured,
+        })
+      : explicit;
   }
   return out;
 }
