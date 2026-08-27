@@ -8,12 +8,12 @@ import { asPositiveFiniteNumber } from "@openclaw/normalization-core/number-coer
 import { normalizeOptionalString } from "@openclaw/normalization-core/string-coerce";
 import { isNonSecretApiKeyMarker } from "./model-auth-markers.js";
 import { resolveCatalogOwnedModelCompat } from "./model-compat-catalog.js";
+import {
+  modelKey,
+  normalizeConfiguredProviderCatalogModelId,
+  type ModelManifestNormalizationContext,
+} from "./model-ref-shared.js";
 import type { ProviderConfig } from "./models-config.providers.secrets.js";
-
-export type ProviderCatalogModelInputPresenceResolver = (
-  providerId: string,
-  modelId: string,
-) => boolean | undefined;
 
 export function normalizeProviderMapKeys<T>(
   providers: Record<string, T> | null | undefined,
@@ -63,28 +63,25 @@ export function mergeProviderModels(
   explicit: ProviderConfig,
   options?: {
     providerId: string;
-    resolveModelInputConfigured?: ProviderCatalogModelInputPresenceResolver;
+    sourceModelInputOmissions?: ReadonlySet<string>;
+    manifestPlugins?: ModelManifestNormalizationContext["manifestPlugins"];
+    preserveConfiguredModelMembership?: boolean;
   },
 ): ProviderConfig {
-  const explicitProvider = options
-    ? inheritDiscoveredModelInput({ implicit, explicit, ...options })
-    : explicit;
   const implicitModels = Array.isArray(implicit.models) ? implicit.models : [];
-  const explicitModels = Array.isArray(explicitProvider.models) ? explicitProvider.models : [];
+  const explicitModels = Array.isArray(explicit.models) ? explicit.models : [];
   const implicitHeaders =
     implicit.headers && typeof implicit.headers === "object" && !Array.isArray(implicit.headers)
       ? implicit.headers
       : undefined;
   const explicitHeaders =
-    explicitProvider.headers &&
-    typeof explicitProvider.headers === "object" &&
-    !Array.isArray(explicitProvider.headers)
-      ? explicitProvider.headers
+    explicit.headers && typeof explicit.headers === "object" && !Array.isArray(explicit.headers)
+      ? explicit.headers
       : undefined;
   if (implicitModels.length === 0) {
     return {
       ...implicit,
-      ...explicitProvider,
+      ...explicit,
       ...(implicitHeaders || explicitHeaders
         ? {
             headers: {
@@ -113,6 +110,19 @@ export function mergeProviderModels(
     if (!implicitModel) {
       return explicitModel;
     }
+    const sourceOmittedInput =
+      options &&
+      options.sourceModelInputOmissions?.has(
+        modelKey(
+          normalizeProviderId(options.providerId),
+          normalizeConfiguredProviderCatalogModelId(options.providerId, id, options),
+        ),
+      ) === true;
+    if (options?.preserveConfiguredModelMembership) {
+      return sourceOmittedInput && implicitModel.input !== undefined
+        ? Object.assign({}, explicitModel, { input: implicitModel.input })
+        : explicitModel;
+    }
 
     const contextWindow =
       asPositiveFiniteNumber(explicitModel.contextWindow) ??
@@ -130,12 +140,9 @@ export function mergeProviderModels(
       },
       catalogCompat: implicitModel.compat,
       configuredRoute: {
-        api: explicitModel.api ?? explicitProvider.api ?? implicitModel.api ?? implicit.api,
+        api: explicitModel.api ?? explicit.api ?? implicitModel.api ?? implicit.api,
         baseUrl:
-          explicitModel.baseUrl ??
-          explicitProvider.baseUrl ??
-          implicitModel.baseUrl ??
-          implicit.baseUrl,
+          explicitModel.baseUrl ?? explicit.baseUrl ?? implicitModel.baseUrl ?? implicit.baseUrl,
       },
       configuredCompat: explicitModel.compat,
     });
@@ -144,7 +151,12 @@ export function mergeProviderModels(
       {},
       explicitModel,
       {
-        input: "input" in explicitModel ? explicitModel.input : implicitModel.input,
+        input:
+          sourceOmittedInput && implicitModel.input !== undefined
+            ? implicitModel.input
+            : "input" in explicitModel
+              ? explicitModel.input
+              : implicitModel.input,
         reasoning: `reasoning` in explicitModel ? explicitModel.reasoning : implicitModel.reasoning,
       },
       contextWindow === undefined ? {} : { contextWindow },
@@ -154,18 +166,20 @@ export function mergeProviderModels(
     );
   });
 
-  for (const implicitModel of implicitModels) {
-    const id = getProviderModelId(implicitModel);
-    if (!id || seen.has(id)) {
-      continue;
+  if (!options?.preserveConfiguredModelMembership) {
+    for (const implicitModel of implicitModels) {
+      const id = getProviderModelId(implicitModel);
+      if (!id || seen.has(id)) {
+        continue;
+      }
+      seen.add(id);
+      mergedModels.push(implicitModel);
     }
-    seen.add(id);
-    mergedModels.push(implicitModel);
   }
 
   return {
     ...implicit,
-    ...explicitProvider,
+    ...explicit,
     ...(implicitHeaders || explicitHeaders
       ? {
           headers: {
@@ -178,49 +192,12 @@ export function mergeProviderModels(
   };
 }
 
-/** Restores discovered input only when the source model row omitted that field. */
-export function inheritDiscoveredModelInput(params: {
-  providerId: string;
-  implicit: ProviderConfig;
-  explicit: ProviderConfig;
-  resolveModelInputConfigured?: ProviderCatalogModelInputPresenceResolver;
-}): ProviderConfig {
-  const { resolveModelInputConfigured } = params;
-  const explicitModels = Array.isArray(params.explicit.models) ? params.explicit.models : [];
-  const implicitModels = Array.isArray(params.implicit.models) ? params.implicit.models : [];
-  if (!resolveModelInputConfigured || explicitModels.length === 0 || implicitModels.length === 0) {
-    return params.explicit;
-  }
-
-  const implicitById = new Map(
-    implicitModels
-      .map((model) => [getProviderModelId(model), model] as const)
-      .filter(([id]) => Boolean(id)),
-  );
-  let mutated = false;
-  const models = explicitModels.map((explicitModel) => {
-    const id = getProviderModelId(explicitModel);
-    const implicitModel = implicitById.get(id);
-    if (
-      !id ||
-      !implicitModel ||
-      implicitModel.input === undefined ||
-      resolveModelInputConfigured(params.providerId, id) !== false
-    ) {
-      return explicitModel;
-    }
-    mutated = true;
-    return Object.assign({}, explicitModel, { input: implicitModel.input });
-  });
-
-  return mutated ? { ...params.explicit, models } : params.explicit;
-}
-
 /** Merges implicit and explicit provider config maps by provider id. */
 export function mergeProviders(params: {
   implicit?: Record<string, ProviderConfig> | null;
   explicit?: Record<string, ProviderConfig> | null;
-  resolveModelInputConfigured?: ProviderCatalogModelInputPresenceResolver;
+  sourceModelInputOmissions?: ReadonlySet<string>;
+  manifestPlugins?: ModelManifestNormalizationContext["manifestPlugins"];
 }): Record<string, ProviderConfig> {
   const out = normalizeProviderMapKeys(params.implicit);
   for (const [providerKey, explicit] of Object.entries(normalizeProviderMapKeys(params.explicit))) {
@@ -228,7 +205,8 @@ export function mergeProviders(params: {
     out[providerKey] = implicit
       ? mergeProviderModels(implicit, explicit, {
           providerId: providerKey,
-          resolveModelInputConfigured: params.resolveModelInputConfigured,
+          sourceModelInputOmissions: params.sourceModelInputOmissions,
+          manifestPlugins: params.manifestPlugins,
         })
       : explicit;
   }

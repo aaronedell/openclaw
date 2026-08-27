@@ -31,11 +31,7 @@ import {
   resolveNonEnvSecretRefApiKeyMarker,
 } from "./model-auth-markers.js";
 import { parseConfiguredModelVisibilityEntries } from "./model-selection-shared.js";
-import {
-  inheritDiscoveredModelInput,
-  mergeProviderModels,
-  type ProviderCatalogModelInputPresenceResolver,
-} from "./models-config.merge.js";
+import { mergeProviderModels } from "./models-config.merge.js";
 import type {
   ProviderApiKeyResolver,
   ProviderAuthResolver,
@@ -75,7 +71,7 @@ type ImplicitProviderParams = {
   providerDiscoveryTimeoutMs?: number;
   providerDiscoveryEntriesOnly?: boolean;
   onProviderCatalogOutcome?: (outcome: ProviderCatalogOutcome) => void;
-  resolveModelInputConfigured?: ProviderCatalogModelInputPresenceResolver;
+  sourceModelInputOmissions?: ReadonlySet<string>;
 };
 
 type ImplicitProviderContext = ImplicitProviderParams & {
@@ -269,7 +265,8 @@ function mergeImplicitProviderConfig(params: {
   existing: ProviderConfig | undefined;
   implicit: ProviderConfig;
   dynamicProviderModels?: boolean;
-  resolveModelInputConfigured?: ProviderCatalogModelInputPresenceResolver;
+  sourceModelInputOmissions?: ReadonlySet<string>;
+  manifestPlugins?: PluginMetadataSnapshot["manifestRegistry"]["plugins"];
 }): ProviderConfig {
   const { providerId, existing, implicit } = params;
   if (!existing) {
@@ -279,27 +276,12 @@ function mergeImplicitProviderConfig(params: {
   if (merge) {
     return merge({ existing, implicit });
   }
-  if (params.dynamicProviderModels) {
-    // Wildcard-visible providers preserve discovered catalog updates while
-    // keeping explicit user config authoritative for non-model fields.
-    return mergeProviderModels(implicit, existing, {
-      providerId,
-      resolveModelInputConfigured: params.resolveModelInputConfigured,
-    });
-  }
-  const merged = {
-    ...implicit,
-    ...existing,
-    models:
-      Array.isArray(existing.models) && existing.models.length > 0
-        ? existing.models
-        : implicit.models,
-  };
-  return inheritDiscoveredModelInput({
+  return mergeProviderModels(implicit, existing, {
     providerId,
-    implicit,
-    explicit: merged,
-    resolveModelInputConfigured: params.resolveModelInputConfigured,
+    sourceModelInputOmissions: params.sourceModelInputOmissions,
+    manifestPlugins: params.manifestPlugins,
+    preserveConfiguredModelMembership:
+      !params.dynamicProviderModels && Array.isArray(existing.models) && existing.models.length > 0,
   });
 }
 
@@ -498,7 +480,8 @@ async function resolvePluginImplicitProviders(
           config: ctx.config,
           providerId,
         }),
-        resolveModelInputConfigured: ctx.resolveModelInputConfigured,
+        sourceModelInputOmissions: ctx.sourceModelInputOmissions,
+        manifestPlugins: ctx.pluginMetadataSnapshot?.manifestRegistry.plugins,
       });
       discovered[providerId] = resolveImplicitProviderAuthMarker({
         ctx,

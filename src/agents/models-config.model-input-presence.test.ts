@@ -1,14 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
-import {
-  planOpenClawModelsJsonWithDeps,
-  resolveProvidersForModelsJsonWithDeps,
-} from "./models-config.plan.test-support.js";
+import { planOpenClawModelsJsonWithDeps } from "./models-config.plan.test-support.js";
 
 type ResolveImplicitProviders = NonNullable<
-  NonNullable<
-    Parameters<typeof resolveProvidersForModelsJsonWithDeps>[1]
-  >["resolveImplicitProviders"]
+  NonNullable<Parameters<typeof planOpenClawModelsJsonWithDeps>[1]>["resolveImplicitProviders"]
 >;
 
 function model(id: string, input: Array<"text" | "image"> = ["text"]) {
@@ -24,63 +19,23 @@ function model(id: string, input: Array<"text" | "image"> = ["text"]) {
 }
 
 describe("models config input presence", () => {
-  it("keeps provider catalog config materialized while reporting source field presence", async () => {
-    const cfg: OpenClawConfig = {
-      models: {
-        providers: {
-          "amazon-bedrock": {
-            baseUrl: "https://bedrock-runtime.us-east-1.amazonaws.com",
-            models: [model("vision-model"), model("text-only-model")],
-          },
-        },
-      },
-    };
-    const sourceConfigForSecrets = {
-      models: {
-        providers: {
-          "amazon-bedrock": {
-            baseUrl: "https://bedrock-runtime.us-east-1.amazonaws.com",
-            models: [
-              { id: "vision-model", name: "vision-model" },
-              { id: "text-only-model", name: "text-only-model", input: ["text"] },
-            ],
-          },
-        },
-      },
-    } as unknown as OpenClawConfig;
-    const resolveImplicitProviders = vi.fn<ResolveImplicitProviders>(async () => ({}));
-
-    await resolveProvidersForModelsJsonWithDeps(
-      {
-        cfg,
-        sourceConfigForSecrets,
-        agentDir: "/tmp/openclaw-model-input-presence",
-        env: {},
-      },
-      { resolveImplicitProviders },
-    );
-
-    const params = resolveImplicitProviders.mock.calls[0]?.[0];
-    expect(params?.config.models?.providers?.["amazon-bedrock"]?.models[0]?.input).toEqual([
-      "text",
-    ]);
-    expect(params?.resolveModelInputConfigured?.("amazon-bedrock", "vision-model")).toBe(false);
-    expect(params?.resolveModelInputConfigured?.("amazon-bedrock", "text-only-model")).toBe(true);
-    expect(params?.resolveModelInputConfigured?.("amazon-bedrock", "custom-model")).toBeUndefined();
-  });
-
   it.each([
     {
       name: "inherits discovered input when source input was omitted",
-      sourceModel: { id: "vision-model", name: "vision-model" },
+      sourceModels: [{ id: "vision-model", name: "vision-model" }],
       expected: ["text", "image"],
     },
     {
       name: "preserves text-only input when source input was explicit",
-      sourceModel: { id: "vision-model", name: "vision-model", input: ["text"] },
+      sourceModels: [{ id: "vision-model", name: "vision-model", input: ["text"] }],
       expected: ["text"],
     },
-  ] as const)("$name in the final generated models.json", async ({ sourceModel, expected }) => {
+    {
+      name: "keeps materialized input when the source row is missing",
+      sourceModels: [],
+      expected: ["text"],
+    },
+  ] as const)("$name in the final generated models.json", async ({ sourceModels, expected }) => {
     const configuredProvider = {
       baseUrl: "https://bedrock-runtime.us-east-1.amazonaws.com",
       apiKey: "AWS_PROFILE",
@@ -95,7 +50,7 @@ describe("models config input presence", () => {
           "amazon-bedrock": {
             baseUrl: configuredProvider.baseUrl,
             apiKey: configuredProvider.apiKey,
-            models: [sourceModel],
+            models: sourceModels,
           },
         },
       },

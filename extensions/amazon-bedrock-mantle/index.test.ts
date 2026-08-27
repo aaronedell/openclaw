@@ -63,7 +63,7 @@ describe("amazon-bedrock-mantle provider plugin", () => {
           providers: {
             "amazon-bedrock-mantle": {
               baseUrl: "https://explicit.example.test/v1",
-              models: [],
+              models: [{ id: "anthropic.claude-opus-4-7", input: ["text"] }],
             },
           },
         },
